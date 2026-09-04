@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>MDG - Magnetic Dart Game Scoreboard</title>
+    <style>
+        :root {
+            --bg-dark: #09090b;
+            --card-bg: #141419;
+            --accent-yellow: #ffd700;
+            --accent-red: #ff4757;
+            --accent-green: #2ed573;
+            --text-light: #f1f2f6;
+            --text-dim: #a4b0be;
+            --border-color: #2a2a35;
+        }
+
+        /* Enforce manipulation touch action to remove mobile click delays */
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; user-select: none; touch-action: manipulation; }
+
+        body { background-color: var(--bg-dark); color: var(--text-light); height: 100vh; width: 100vw; overflow: hidden; display: flex; }
+
+        .hidden { display: none !important; }
+
+        /* --- SETUP SCREEN --- */
+        #setup-screen { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            background: var(--bg-dark); z-index: 200; 
+            display: flex; align-items: center; justify-content: center; padding: 20px; overflow-y: auto;
+        }
+        .setup-card { 
+            width: 100%; max-width: 600px; background-color: var(--card-bg); 
+            border: 1px solid var(--border-color); border-radius: 10px; padding: 20px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.9); 
+        }
+        .setup-header { text-align: center; color: var(--accent-yellow); font-size: 1.8rem; margin-bottom: 20px; }
+        .form-row { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; align-items: flex-start; }
+        .form-group { flex: 1; min-width: 180px; background: #1a1a20; }
+        .mode-panel { border: 1px solid var(--border-color); padding: 12px; border-radius: 6px; background: #131317; }
+        label { display: block; font-size: 0.9rem; color: var(--text-dim); margin-bottom: 6px; }
+        select, input { width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); background-color: #25252d; color: var(--text-light); outline: none; font-size: 1rem; }
+        
+        .team-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-bottom: 20px; }
+        .team-box { border: 1px solid var(--border-color); padding: 12px; border-radius: 6px; background: #131317; }
+        .btn { border: none; padding: 12px; border-radius: 6px; font-weight: bold; cursor: pointer; text-align: center; transition: transform 0.1s, background-color 0.2s; font-size: 1rem; }
+        .btn:active { transform: scale(0.97); }
+        .btn-success { background-color: var(--accent-green); color: #000; width: 100%; font-size: 1.1rem; }
+        .btn-danger { background-color: var(--accent-red); color: #fff; width: 100%; }
+        .btn-secondary { background-color: #3b3b4f; color: #fff; border: 1px solid #4a4a5e; }
+        .btn-toggle { background-color: #007bff; color: #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.4); padding: 14px 24px; border-radius: 30px; font-size: 1.1rem; width: auto; }
+        .action-row { display: flex; gap: 10px; margin-top: 15px; }
+
+        /* --- MODAL (MANUAL) --- */
+        #manual-modal {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.85); z-index: 1000;
+            display: flex; justify-content: center; align-items: center; padding: 20px;
+        }
+        .modal-content {
+            background: var(--card-bg); border: 1px solid var(--border-color);
+            border-left: 4px solid var(--accent-yellow); padding: 25px;
+            border-radius: 8px; max-width: 500px; width: 100%; max-height: 90vh; overflow-y: auto;
+            position: relative; line-height: 1.6; color: #dcdde1; font-size: 0.95rem;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.8); animation: popIn 0.2s ease-out;
+        }
+        .close-btn { position: absolute; top: 10px; right: 15px; font-size: 1.8rem; cursor: pointer; color: var(--text-dim); line-height: 1; }
+        
+        /* --- GAME SPLIT LAYOUT --- */
+        #game-container { display: flex; flex-direction: row; width: 100%; height: 100%; position: relative; }
+        
+        /* Layout Reverse Class for Right Mat */
+        #game-container.mat-right { flex-direction: row-reverse; }
+        #game-container.mat-right #points-panel { border-left: none; border-right: 1px solid var(--border-color); }
+        
+        /* Left Mat Panel */
+        #mat-panel { 
+            flex: 1.2; background: #050507; 
+            display: flex; justify-content: center; align-items: center; 
+            position: relative; padding: 10px;
+        }
+        
+        /* Right Points Panel */
+        #points-panel { 
+            flex: 1; display: flex; flex-direction: column; height: 100%; gap: 15px;
+            border-left: 1px solid var(--border-color); background: var(--bg-dark); max-width: 600px; padding: 15px;
+        }
+        
+        .mobile-controls { display: none; position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 100; }
+
+        /* --- POINTS UI ELEMENTS --- */
+        .top-panel { 
+            background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; 
+            padding: 15px 20px; border-left: 5px solid var(--accent-yellow); 
+            display: flex; flex-direction: row; justify-content: space-between; align-items: center; flex-shrink: 0; 
+        }
+        .player-info { display: flex; flex-direction: column; gap: 2px; }
+        .current-player { font-size: 1.5rem; font-weight: bold; color: var(--accent-yellow); line-height: 1.1; }
+        .current-team { font-size: 0.85rem; color: var(--text-dim); }
+        
+        .dart-tracker { display: flex; gap: 20px; align-items: center; }
+        .dart-boxes { display: flex; gap: 8px;}
+        .dart-box { 
+            width: 45px; height: 35px; border: 2px dashed #444; border-radius: 6px; 
+            display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 1.1rem; color: #666;
+        }
+        .dart-box.active { border-color: var(--accent-yellow); background: rgba(255, 215, 0, 0.1); color: var(--text-light); }
+        .turn-total { font-size: 2rem; font-weight: bold; color: var(--accent-green); min-width: 40px; text-align: right; }
+
+        .leaderboard-container { flex: 1; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 10px; overflow-y: auto; }
+        .scoreboard-table { width: 100%; border-collapse: collapse; font-size: 1rem; }
+        .scoreboard-table th { background: #1c1c24; position: sticky; top: 0; padding: 12px; font-size: 0.9rem; color: var(--text-dim); text-align: left; border-bottom: 1px solid var(--border-color); }
+        .scoreboard-table td { padding: 12px; border-bottom: 1px solid var(--border-color); }
+        .active-row { background-color: rgba(255, 215, 0, 0.08); border-left: 3px solid var(--accent-yellow); }
+
+        /* --- BOTTOM COMPACT CONTROLS --- */
+        .controls-container { display: flex; gap: 6px; flex-shrink: 0; }
+        
+        .btn-small { 
+            flex: 1; 
+            padding: 8px 2px; 
+            font-size: 0.75rem; 
+            border-radius: 4px; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            white-space: nowrap; 
+        }
+        .btn-layout { background: #1c1c24; border: 1px solid var(--border-color); color: var(--text-dim); }
+        .btn-layout.active { background: #3b3b4f; color: var(--text-light); }
+
+        /* --- MAXIMIZED REALISTIC MAT ELEMENTS --- */
+        #physical-mat {
+            width: 100%; 
+            max-width: min(100%, calc((100vh - 20px) * 0.98)); 
+            aspect-ratio: 1 / 1.05; 
+            background: #111; border-radius: 2px;
+            position: relative; cursor: crosshair;
+            box-shadow: inset 0 0 40px rgba(0,0,0,0.9), 0 10px 25px rgba(0,0,0,0.6);
+            display: flex; justify-content: center; align-items: center;
+        }
+
+        .hanging-string { position: absolute; top: -5%; left: 0; width: 100%; height: 8%; pointer-events: none; }
+        .hanging-rod { position: absolute; top: 0.5%; left: -2%; width: 104%; height: 2%; background: linear-gradient(180deg, #333, #000); border-radius: 8px; box-shadow: 0 4px 5px rgba(0,0,0,0.5); pointer-events: none; }
+        .dart-storage { position: absolute; bottom: 3%; right: 3%; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 6px; border: 1px solid #333; border-radius: 4px; pointer-events: none; }
+        .dart-dot { width: 8px; height: 8px; background: var(--accent-yellow); border-radius: 50%; box-shadow: inset -2px -2px 3px #a08000; }
+        
+        .svg-container { width: 98%; height: 98%; pointer-events: auto; padding-top: 3%; display: flex; justify-content: center; }
+        svg { width: 100%; height: 100%; }
+        path, circle { transition: opacity 0.1s; cursor: crosshair; }
+        path:active, circle:active { opacity: 0.7; }
+        
+        .dart-marker { position: absolute; width: 14px; height: 14px; background: radial-gradient(circle at 30% 30%, #ff4757, #600); border: 1.5px solid #fff; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; box-shadow: 3px 3px 5px rgba(0,0,0,0.8); z-index: 5; animation: popIn 0.2s ease-out; }
+        .floating-score { position: absolute; color: var(--accent-yellow); font-weight: 900; font-size: 1.8rem; text-shadow: 2px 2px 0 #000, -1.5px -1.5px 0 #000, 1.5px -1.5px 0 #000, -1.5px 1.5px 0 #000; pointer-events: none; transform: translate(-50%, -100%); animation: floatUp 0.8s ease-out forwards; z-index: 10; white-space: nowrap; }
+
+        /* --- WIN SIMULATION OVERLAY --- */
+        #win-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.92); z-index: 300;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; overflow: hidden;
+        }
+        .win-card { background: var(--card-bg); padding: 40px; border-radius: 20px; border: 2px solid var(--accent-yellow); box-shadow: 0 0 50px rgba(255, 215, 0, 0.3); animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); z-index: 301; min-width: 300px; }
+        .win-title { font-size: 2.5rem; color: var(--accent-yellow); margin-bottom: 5px; }
+        .win-subtitle { font-size: 1.2rem; color: var(--text-dim); margin-bottom: 25px; }
+        .confetti { position: absolute; width: 12px; height: 12px; top: -20px; animation: fall linear forwards; }
+
+        @keyframes popIn { 0% { transform: scale(0.5); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+        @keyframes floatUp { 0% { opacity: 1; transform: translate(-50%, -10px) scale(1); } 100% { opacity: 0; transform: translate(-50%, -50px) scale(1.2); } }
+        @keyframes fall { to { transform: translateY(110vh) rotate(720deg); } }
+
+        /* --- MOBILE RESPONSIVE --- */
+        @media (max-width: 768px) {
+            .mobile-controls { display: block; }
+            #game-container, #game-container.mat-right { flex-direction: column; }
+            #game-container.mat-right #points-panel { border-right: none; }
+            #points-panel { max-width: 100%; border-left: none; }
+            .panel { position: absolute; top: 0; left: 0; width: 100%; height: 100%; transition: opacity 0.3s ease; opacity: 0; pointer-events: none; z-index: 1; padding-bottom: 90px; }
+            .panel.active { opacity: 1; pointer-events: auto; z-index: 2; }
+            
+            #physical-mat { max-width: min(100%, calc((100vh - 100px) * 0.95)); width: 98vw; } 
+            
+            .top-panel { flex-direction: column; gap: 15px; align-items: stretch; }
+            .dart-tracker { justify-content: space-between; }
+            
+            .hide-mobile { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- MANUAL MODAL -->
+<div id="manual-modal" class="hidden">
+    <div class="modal-content">
+        <span class="close-btn" onclick="closeManual()">&times;</span>
+        <div id="modal-text"></div>
+    </div>
+</div>
+
+<!-- WIN CELEBRATION OVERLAY -->
+<div id="win-overlay" class="hidden">
+    <div class="win-card">
+        <h1 class="win-title">🏆 WINS! 🏆</h1>
+        <h2 class="win-title" id="win-player-name" style="font-size:3rem; margin-bottom:10px;">Player</h2>
+        <p class="win-subtitle" id="win-team-name">Team Name</p>
+        <button class="btn btn-success" onclick="resetMatch()">Play Again</button>
+    </div>
+</div>
+
+<!-- SETUP SCREEN -->
+<div id="setup-screen">
+    <div class="setup-card">
+        <h1 class="setup-header">🎯 MDG Match Setup</h1>
+        
+        <div class="form-row">
+            <div class="form-group mode-panel">
+                <label>Game Mode Setup</label>
+                <select id="game-mode" onchange="toggleModeRules()" style="margin-bottom: 10px;">
+                    <option value="countdown">Count Down (Custom X01)</option>
+                    <option value="countup">Count-Up (Accumulate)</option>
+                    <option value="target">Target Ring Master</option>
+                </select>
+                
+                <div id="target-score-group">
+                    <label id="target-label" style="color: var(--accent-yellow);">Starting Score (e.g., 301, 501)</label>
+                    <input type="number" id="target-score" value="501" min="10">
+                </div>
+
+                <div id="double-out-group">
+                    <label style="display: flex; align-items: center; gap: 8px; font-size:1rem; margin-top: 10px; color: var(--accent-yellow);">
+                        <input type="checkbox" id="double-out" checked style="width: auto;"> 
+                        Finish exactly on Double (Double-Out)
+                    </label>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Starting Mat Side</label>
+                <select id="starting-side">
+                    <option value="front">Front (Dartboard)</option>
+                    <option value="back">Back (Target Rings)</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>Number of Teams (Enter Value)</label>
+                <input type="number" id="team-count" value="2" min="1" max="20" oninput="generateTeamInputs()">
+            </div>
+        </div>
+
+        <div class="team-grid" id="teams-container"></div>
+        
+        <div class="action-row">
+            <button class="btn btn-secondary" style="flex: 1;" onclick="openManual()">📖 How to Play</button>
+            <button class="btn btn-success" style="flex: 2;" onclick="startGame()">Start Match</button>
+        </div>
+    </div>
+</div>
+
+<!-- GAME SPLIT SCREEN -->
+<div id="game-container" class="hidden">
+    
+    <div class="mobile-controls">
+        <button id="toggleViewBtn" class="btn btn-toggle" onclick="toggleMobileView()">Switch to Points</button>
+    </div>
+
+    <!-- LEFT PANEL: PHYSICAL MAT -->
+    <div id="mat-panel" class="panel active">
+        <div id="physical-mat" onclick="handleHit(0, 1, 0, event, false)">
+            <div class="hanging-string">
+                <svg viewBox="0 0 100 30" preserveAspectRatio="none">
+                    <path d="M 0 30 L 50 0 L 100 30" fill="none" stroke="#555" stroke-width="2"/>
+                </svg>
+            </div>
+            <div class="hanging-rod"></div>
+            
+            <div id="svg-front-container" class="svg-container"></div>
+            <div id="svg-back-container" class="svg-container hidden"></div>
+            
+            <div class="dart-storage">
+                <div class="dart-dot"></div><div class="dart-dot"></div><div class="dart-dot"></div>
+                <div class="dart-dot"></div><div class="dart-dot"></div><div class="dart-dot"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- RIGHT PANEL: POINTS & SCOREBOARD -->
+    <div id="points-panel" class="panel">
+        
+        <div class="top-panel">
+            <div class="player-info">
+                <span class="current-player" id="display-player-name">Player 1B</span>
+                <span class="current-team" id="display-team-name">Team 1</span>
+            </div>
+            <div class="dart-tracker">
+                <div class="dart-boxes">
+                    <div class="dart-box" id="dart-1">-</div>
+                    <div class="dart-box" id="dart-2">-</div>
+                    <div class="dart-box" id="dart-3">-</div>
+                </div>
+                <div class="turn-total" id="turn-total">0</div>
+            </div>
+        </div>
+
+        <div class="leaderboard-container">
+            <table class="scoreboard-table">
+                <thead><tr><th>Player</th><th>Score</th></tr></thead>
+                <tbody id="scoreboard-body"></tbody>
+            </table>
+        </div>
+
+        <!-- NEW: Compact 5-Button Control Bar -->
+        <div class="controls-container">
+            <button class="btn btn-layout active btn-small hide-mobile" id="btn-layout-left" onclick="switchMatLayout('left')">◀ Left</button>
+            <button class="btn btn-layout btn-small hide-mobile" id="btn-layout-right" onclick="switchMatLayout('right')">Right ▶</button>
+            <button class="btn btn-secondary btn-small" onclick="undoThrow()">Undo</button>
+            <button class="btn btn-secondary btn-small" onclick="flipBoard()">Flip</button>
+            <button class="btn btn-danger btn-small" onclick="resetMatch()">End</button>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    // --- MANUAL MODAL LOGIC ---
+    function openManual() {
+        const mode = document.getElementById('game-mode').value;
+        const doubleOut = document.getElementById('double-out').checked;
+        const targetScore = parseInt(document.getElementById('target-score').value) || 501;
+        const modalText = document.getElementById('modal-text');
+
+        let title = "", text = "";
+
+        if (mode === 'countdown') {
+            title = `How to play Count Down (X01)`;
+            text = `All players start at <strong>${targetScore}</strong>. Your goal is to subtract your points each turn and reach exactly <strong>0</strong>. <br><br>`;
+            if (doubleOut) {
+                text += `🎯 <strong>Double Out Active:</strong> To win, the final dart that reduces your score to 0 MUST hit a <strong>Double</strong> ring (the outer narrow ring) OR the <strong>Inner Red Bullseye</strong>.<br><br>`;
+                text += `⚠️ <strong>Busting:</strong> If you score more points than you have left, leave exactly 1 point, or reach 0 by hitting a single/triple (not a double), you <strong>BUST</strong>. Your turn ends immediately and your score resets.`;
+            } else {
+                text += `🎯 <strong>Standard Out:</strong> To win, simply land on exactly 0 with any dart.<br><br>`;
+                text += `⚠️ <strong>Busting:</strong> If you score more points than you have left, you <strong>BUST</strong>. Your turn ends immediately and your score resets.`;
+            }
+        } else {
+            let modeName = (mode === 'countup') ? 'Count-Up' : 'Target Ring Master';
+            title = `How to play ${modeName}`;
+            text = `All players start at <strong>0</strong>. Your goal is to accumulate points by hitting the board. <br><br>`;
+            text += `🎯 <strong>Target Win Score:</strong> The first player/team to reach or exceed exactly <strong>${targetScore}</strong> points wins the game!<br><br>`;
+            text += `There are no busting rules in this mode. Just score as high as you can each turn!`;
+        }
+        text += `<br><br>💡 <strong>Wire Hits (Bounce Outs):</strong> Hitting the exact lines separating the blocks mimics a real wire bounce-out and scores 0 points!`;
+
+        modalText.innerHTML = `<div class="manual-title">📖 ${title}</div><div>${text}</div>`;
+        document.getElementById('manual-modal').classList.remove('hidden');
+    }
+
+    function closeManual() { document.getElementById('manual-modal').classList.add('hidden'); }
+    document.getElementById('manual-modal').addEventListener('click', function(e) { if (e.target === this) closeManual(); });
+
+    // --- MOBILE TOGGLE STATE ---
+    let showingMat = true;
+    function toggleMobileView() {
+        showingMat = !showingMat;
+        const pointsPanel = document.getElementById('points-panel');
+        const matPanel = document.getElementById('mat-panel');
+        const btn = document.getElementById('toggleViewBtn');
+
+        if (showingMat) {
+            matPanel.classList.add('active'); pointsPanel.classList.remove('active'); btn.textContent = 'Switch to Points';
+        } else {
+            pointsPanel.classList.add('active'); matPanel.classList.remove('active'); btn.textContent = 'Switch to Mat';
+        }
+    }
+
+    // --- SCREEN LAYOUT SWITCHING ---
+    function switchMatLayout(side) {
+        const container = document.getElementById('game-container');
+        const btnLeft = document.getElementById('btn-layout-left');
+        const btnRight = document.getElementById('btn-layout-right');
+
+        if (side === 'right') {
+            container.classList.add('mat-right');
+            btnRight.classList.add('active');
+            btnLeft.classList.remove('active');
+        } else {
+            container.classList.remove('mat-right');
+            btnLeft.classList.add('active');
+            btnRight.classList.remove('active');
+        }
+    }
+
+    // --- GAME ENGINE STATE ---
+    let gameEngine = {
+        mode: 'countdown', doubleOut: true, activeSide: 'front', targetScore: 501,
+        teams: [], flatPlayers: [], currentPlayerIdx: 0, currentDartIdx: 0,
+        turnDarts: [], historyStack: []
+    };
+
+    // --- PROCEDURAL SVG MAT GENERATION ---
+    function getSectorPath(cx, cy, rIn, rOut, aStart, aEnd) {
+        const radStart = (aStart - 90) * Math.PI / 180;
+        const radEnd = (aEnd - 90) * Math.PI / 180;
+        const x1 = cx + rIn * Math.cos(radStart), y1 = cy + rIn * Math.sin(radStart);
+        const x2 = cx + rOut * Math.cos(radStart), y2 = cy + rOut * Math.sin(radStart);
+        const x3 = cx + rOut * Math.cos(radEnd), y3 = cy + rOut * Math.sin(radEnd);
+        const x4 = cx + rIn * Math.cos(radEnd), y4 = cy + rIn * Math.sin(radEnd);
+        return `M ${x1} ${y1} L ${x2} ${y2} A ${rOut} ${rOut} 0 0 1 ${x3} ${y3} L ${x4} ${y4} A ${rIn} ${rIn} 0 0 0 ${x1} ${y1} Z`;
+    }
+
+    function generateBoards() {
+        const sectors = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
+        
+        // --- FRONT BOARD ---
+        let svgFront = `<svg viewBox="0 0 500 500" preserveAspectRatio="xMidYMid meet">`;
+        for (let i = 0; i < 20; i++) {
+            let s = sectors[i], start = i * 18 - 9, end = start + 18;
+            let colSing = i % 2 === 0 ? '#111' : '#f5e3b5'; 
+            let colMult = i % 2 === 0 ? '#e84118' : '#2ed573';
+            let stroke = `stroke="#c8d6e5" stroke-width="1.5"`;
+
+            svgFront += `<path d="${getSectorPath(250, 250, 188, 200, start, end)}" fill="${colMult}" ${stroke} onclick="handleHit(${s * 2}, 2, ${s}, event, false)"/>`; 
+            svgFront += `<path d="${getSectorPath(250, 250, 118, 188, start, end)}" fill="${colSing}" ${stroke} onclick="handleHit(${s}, 1, ${s}, event, false)"/>`; 
+            svgFront += `<path d="${getSectorPath(250, 250, 106, 118, start, end)}" fill="${colMult}" ${stroke} onclick="handleHit(${s * 3}, 3, ${s}, event, false)"/>`; 
+            svgFront += `<path d="${getSectorPath(250, 250, 22, 106, start, end)}" fill="${colSing}" ${stroke} onclick="handleHit(${s}, 1, ${s}, event, false)"/>`; 
+            
+            let rad = (start + 9 - 90) * Math.PI / 180;
+            svgFront += `<text x="${250 + 225 * Math.cos(rad)}" y="${250 + 225 * Math.sin(rad) + 8}" fill="#f5e3b5" font-size="24" font-weight="bold" text-anchor="middle" pointer-events="none">${s}</text>`;
+        }
+        svgFront += `<circle cx="250" cy="250" r="22" fill="#111" stroke="#c8d6e5" stroke-width="1.5" onclick="handleHit(25, 1, 25, event, false)"/>`; 
+        svgFront += `<circle cx="250" cy="250" r="10" fill="#e84118" stroke="#c8d6e5" stroke-width="1.5" onclick="handleHit(50, 2, 25, event, false)"/>`;
+        
+        svgFront += `<g pointer-events="stroke" stroke="rgba(255,255,255,0)" stroke-width="4" fill="none" onclick="handleHit(0, 1, 0, event, true)">`;
+        [200, 188, 118, 106, 22, 10].forEach(r => { svgFront += `<circle cx="250" cy="250" r="${r}" />`; });
+        for(let i=0; i<20; i++) {
+            let a = (i * 18 - 9) * Math.PI / 180;
+            svgFront += `<line x1="${250 + 22 * Math.cos(a)}" y1="${250 + 22 * Math.sin(a)}" x2="${250 + 200 * Math.cos(a)}" y2="${250 + 200 * Math.sin(a)}" />`;
+        }
+        svgFront += `</g></svg>`;
+        document.getElementById('svg-front-container').innerHTML = svgFront;
+
+        // --- BACK BOARD ---
+        let svgBack = `<svg viewBox="0 0 500 500" preserveAspectRatio="xMidYMid meet">`;
+        const rings = [
+            { r: 200, s: 10, fill: '#111', txt: '#ffd700' }, { r: 171, s: 20, fill: '#ffd700', txt: '#111' },
+            { r: 142, s: 30, fill: '#111', txt: '#ffd700' }, { r: 114, s: 40, fill: '#ffd700', txt: '#111' },
+            { r: 85, s: 50, fill: '#111', txt: '#ffd700' }, { r: 57, s: 60, fill: '#ffd700', txt: '#111' },
+            { r: 28, s: 80, fill: '#111', txt: '#ffd700' }
+        ];
+        rings.forEach(ring => {
+            svgBack += `<circle cx="250" cy="250" r="${ring.r}" fill="${ring.fill}" stroke="#fff" stroke-width="1" onclick="handleHit(${ring.s}, 1, ${ring.s}, event, false)"/>`;
+            svgBack += `<text x="250" y="${250 - ring.r + 20}" fill="${ring.txt}" font-size="16" font-weight="bold" text-anchor="middle" pointer-events="none">${ring.s}</text>`;
+            svgBack += `<text x="250" y="${250 + ring.r - 8}" fill="${ring.txt}" font-size="16" font-weight="bold" text-anchor="middle" pointer-events="none">${ring.s}</text>`;
+        });
+        
+        svgBack += `<g pointer-events="stroke" stroke="rgba(255,255,255,0)" stroke-width="4" fill="none" onclick="handleHit(0, 1, 0, event, true)">`;
+        rings.forEach(ring => { svgBack += `<circle cx="250" cy="250" r="${ring.r}" />`; });
+        svgBack += `</g></svg>`;
+        
+        document.getElementById('svg-back-container').innerHTML = svgBack;
+    }
+    generateBoards();
+
+    // --- SETUP LOGIC ---
+    function generateTeamInputs() {
+        let count = parseInt(document.getElementById('team-count').value) || 1;
+        if (count > 20) count = 20; 
+        
+        const container = document.getElementById('teams-container');
+        container.innerHTML = '';
+        for (let i = 1; i <= count; i++) {
+            container.innerHTML += `
+            <div class="team-box">
+                <label>Team ${i} Name</label>
+                <input type="text" id="team-${i}-name" value="Team ${i}" style="margin-bottom:10px;">
+                <label>Players (comma-separated)</label>
+                <input type="text" id="team-${i}-players" value="Player ${i}A, Player ${i}B">
+            </div>`;
+        }
+    }
+
+    function toggleModeRules() {
+        const mode = document.getElementById('game-mode').value;
+        const doubleOutGrp = document.getElementById('double-out-group');
+        const targetLabel = document.getElementById('target-label');
+        
+        if(mode === 'countdown') {
+            doubleOutGrp.classList.remove('hidden');
+            targetLabel.innerText = "Starting Score (e.g., 301, 501)";
+        } else {
+            doubleOutGrp.classList.add('hidden');
+            targetLabel.innerText = "Target Win Score";
+        }
+    }
+    
+    generateTeamInputs(); toggleModeRules();
+
+    function startGame() {
+        const mode = document.getElementById('game-mode').value;
+        const doubleOut = document.getElementById('double-out').checked;
+        const targetScore = parseInt(document.getElementById('target-score').value) || 501;
+        const startingSide = document.getElementById('starting-side').value;
+        
+        let teamCount = parseInt(document.getElementById('team-count').value) || 1;
+        if (teamCount > 20) teamCount = 20;
+        let initialScore = (mode === 'countdown') ? targetScore : 0;
+        
+        gameEngine = { mode, doubleOut, activeSide: startingSide, targetScore, teams: [], flatPlayers: [], currentPlayerIdx: 0, currentDartIdx: 0, turnDarts: [], historyStack: [] };
+
+        for (let i = 1; i <= teamCount; i++) {
+            const tName = document.getElementById(`team-${i}-name`).value || `Team ${i}`;
+            const pNames = document.getElementById(`team-${i}-players`).value.split(',').map(s => s.trim()).filter(s => s);
+            pNames.forEach(p => gameEngine.flatPlayers.push({ name: p, teamName: tName, score: initialScore, turnStartScore: initialScore }));
+        }
+
+        if (!gameEngine.flatPlayers.length) return alert('Add at least one player!');
+
+        document.getElementById('setup-screen').classList.add('hidden');
+        document.getElementById('game-container').classList.remove('hidden');
+
+        applyBoardSide();
+        clearMarkers(); updateUI();
+    }
+
+    function applyBoardSide() {
+        if(gameEngine.activeSide === 'back') {
+            document.getElementById('svg-front-container').classList.add('hidden');
+            document.getElementById('svg-back-container').classList.remove('hidden');
+        } else {
+            document.getElementById('svg-front-container').classList.remove('hidden');
+            document.getElementById('svg-back-container').classList.add('hidden');
+        }
+    }
+
+    function flipBoard() {
+        gameEngine.activeSide = (gameEngine.activeSide === 'front') ? 'back' : 'front';
+        applyBoardSide();
+        clearMarkers();
+    }
+
+    // --- GAMEPLAY LOGIC ---
+    function handleHit(pts, mult, sector, event, isWire = false) {
+        event.stopPropagation();
+        if (gameEngine.currentDartIdx >= 3) return;
+
+        const mat = document.getElementById('physical-mat');
+        const rect = mat.getBoundingClientRect();
+        const clickX = event.clientX - rect.left;
+        const clickY = event.clientY - rect.top;
+
+        addVisualMarker(mat, clickX, clickY);
+
+        let txt = "";
+        if (isWire) {
+            txt = "Bounce Out! (0)"; pts = 0; 
+        } else if (pts === 0) {
+            txt = "Miss!";
+        } else {
+            let prefix = mult === 3 ? "T" : mult === 2 ? "D" : "";
+            if (pts === 50) prefix = "DB"; 
+            txt = gameEngine.activeSide === 'front' ? `${prefix}${sector === 25 && pts === 50 ? '' : sector} (${pts})` : `+${pts}`;
+        }
+        
+        showFloatingScore(mat, clickX, clickY, txt);
+
+        let player = gameEngine.flatPlayers[gameEngine.currentPlayerIdx];
+        let throwObj = { playerIdx: gameEngine.currentPlayerIdx, pts, mult, sector, isWire, prevScore: player.score, side: gameEngine.activeSide };
+
+        if (gameEngine.mode === 'countdown') {
+            let newScore = player.score - pts;
+            
+            if (newScore < 0 || (newScore === 1 && gameEngine.doubleOut)) {
+                alert(`BUST!`); player.score = player.turnStartScore;
+                gameEngine.turnDarts.push({pts:0, mult:1, sector:0, bust:true});
+                return setTimeout(endTurn, 800);
+            } else if (newScore === 0) {
+                if (gameEngine.doubleOut && mult !== 2 && gameEngine.activeSide === 'front') {
+                    alert(`BUST! Must finish exactly on a double.`); 
+                    player.score = player.turnStartScore;
+                    return setTimeout(endTurn, 800);
+                }
+                player.score = 0; updateUI();
+                return setTimeout(() => triggerWin(player), 400);
+            } else { 
+                player.score = newScore; 
+            }
+        } else {
+            player.score += pts;
+            if (player.score >= gameEngine.targetScore) {
+                updateUI(); return setTimeout(() => triggerWin(player), 400);
+            }
+        }
+
+        gameEngine.turnDarts.push(throwObj);
+        gameEngine.historyStack.push(throwObj);
+        gameEngine.currentDartIdx++;
+        updateUI();
+        if (gameEngine.currentDartIdx >= 3) setTimeout(endTurn, 800);
+    }
+
+    function endTurn() {
+        gameEngine.currentPlayerIdx = (gameEngine.currentPlayerIdx + 1) % gameEngine.flatPlayers.length;
+        gameEngine.currentDartIdx = 0;
+        gameEngine.turnDarts = [];
+        gameEngine.flatPlayers[gameEngine.currentPlayerIdx].turnStartScore = gameEngine.flatPlayers[gameEngine.currentPlayerIdx].score;
+        clearMarkers(); updateUI();
+    }
+
+    function undoThrow() {
+        if (!gameEngine.historyStack.length) return;
+        let lastThrow = gameEngine.historyStack.pop();
+        let player = gameEngine.flatPlayers[lastThrow.playerIdx];
+        
+        player.score = lastThrow.prevScore;
+        gameEngine.currentPlayerIdx = lastThrow.playerIdx;
+        
+        if (gameEngine.turnDarts.length > 0) {
+            gameEngine.turnDarts.pop(); gameEngine.currentDartIdx--;
+            const markers = document.getElementById('physical-mat').getElementsByClassName('dart-marker');
+            if(markers.length > 0) markers[markers.length - 1].remove();
+        } else {
+            gameEngine.currentDartIdx = 0; clearMarkers();
+        }
+        updateUI();
+    }
+
+    // --- WIN SIMULATION LOGIC ---
+    function triggerWin(player) {
+        document.getElementById('win-player-name').innerText = player.name;
+        document.getElementById('win-team-name').innerText = `${player.teamName} - Score: ${player.score}`;
+        
+        const winOverlay = document.getElementById('win-overlay');
+        winOverlay.classList.remove('hidden');
+        winOverlay.querySelectorAll('.confetti').forEach(c => c.remove());
+        
+        const colors = ['#ffd700', '#ff4757', '#2ed573', '#007bff', '#ffffff'];
+        for(let i = 0; i < 70; i++) {
+            let conf = document.createElement('div'); conf.className = 'confetti';
+            conf.style.left = Math.random() * 100 + 'vw';
+            conf.style.animationDuration = (Math.random() * 3 + 2) + 's';
+            conf.style.animationDelay = (Math.random() * 0.5) + 's';
+            conf.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+            winOverlay.appendChild(conf);
+        }
+    }
+
+    // --- UI UPDATE HELPERS ---
+    function updateUI() {
+        let p = gameEngine.flatPlayers[gameEngine.currentPlayerIdx];
+        document.getElementById('display-player-name').innerText = p.name;
+        document.getElementById('display-team-name').innerText = p.teamName;
+
+        for (let i = 1; i <= 3; i++) {
+            let box = document.getElementById(`dart-${i}`);
+            box.className = 'dart-box'; 
+            if (i - 1 < gameEngine.turnDarts.length) {
+                let d = gameEngine.turnDarts[i - 1];
+                if (d.bust) { box.innerText = 'BUST'; box.style.borderColor = 'var(--accent-red)'; box.style.color = 'var(--accent-red)'; continue; }
+                if (d.isWire) { box.innerText = 'WIRE'; box.style.color = '#fff'; continue; }
+                if (d.pts === 0) { box.innerText = 'MISS'; box.style.color = '#fff'; continue; }
+                
+                box.style.color = '#fff';
+                if (d.side === 'front' && d.sector !== 25) {
+                    box.innerText = `${d.mult===3?'T':d.mult===2?'D':''}${d.sector}`;
+                } else if (d.side === 'front' && d.sector === 25 && d.pts === 50) {
+                    box.innerText = 'DB'; 
+                } else { box.innerText = d.pts; }
+            } else { box.innerText = '-'; box.style.borderColor = ''; box.style.color = '#666'; }
+            if (i - 1 === gameEngine.currentDartIdx) box.classList.add('active');
+        }
+
+        document.getElementById('turn-total').innerText = gameEngine.turnDarts.reduce((sum, d) => sum + (d.bust || d.isWire ? 0 : d.pts), 0);
+
+        let tbody = document.getElementById('scoreboard-body');
+        tbody.innerHTML = '';
+        gameEngine.flatPlayers.forEach((player, idx) => {
+            let row = document.createElement('tr');
+            if (idx === gameEngine.currentPlayerIdx) row.className = 'active-row';
+            let targetText = `<br><small style="color:var(--text-dim);font-size:0.75rem;">Target: ${gameEngine.targetScore}</small>`;
+            row.innerHTML = `<td>${player.name}<br><small style="color:var(--text-dim);font-size:0.8rem;">${player.teamName}</small></td><td style="font-weight:bold; font-size:1.3rem;">${player.score}${targetText}</td>`;
+            tbody.appendChild(row);
+        });
+    }
+
+    function addVisualMarker(mat, x, y) {
+        let m = document.createElement('div'); m.className = 'dart-marker';
+        m.style.left = `${x}px`; m.style.top = `${y}px`; mat.appendChild(m);
+    }
+    
+    function showFloatingScore(mat, x, y, text) {
+        let f = document.createElement('div'); f.className = 'floating-score';
+        f.innerText = text; f.style.left = `${x}px`; f.style.top = `${y}px`;
+        mat.appendChild(f); setTimeout(() => f.remove(), 800);
+    }
+    
+    function clearMarkers() { document.querySelectorAll('.dart-marker, .floating-score').forEach(el => el.remove()); }
+    
+    function resetMatch() { 
+        document.getElementById('win-overlay').classList.add('hidden');
+        document.getElementById('game-container').classList.add('hidden'); 
+        document.getElementById('setup-screen').classList.remove('hidden'); 
+        clearMarkers();
+        showingMat = true;
+        document.getElementById('mat-panel').classList.add('active');
+        document.getElementById('points-panel').classList.remove('active');
+        document.getElementById('toggleViewBtn').textContent = 'Switch to Points';
+    }
+</script>
+</body>
+</html>
